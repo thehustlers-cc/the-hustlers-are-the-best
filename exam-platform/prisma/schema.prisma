@@ -1,0 +1,166 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+  STUDENT
+}
+
+enum QuestionType {
+  MCQ
+  OPEN_ENDED
+  SHORT_ANSWER
+}
+
+enum ExamStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum SubmissionStatus {
+  IN_PROGRESS
+  SUBMITTED
+  GRADED
+}
+
+model User {
+  id                String             @id @default(cuid())
+  email             String             @unique
+  password          String
+  name              String
+  role              Role               @default(STUDENT)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  resetToken        String?
+  resetTokenExpiry  DateTime?
+  
+  createdExams      Exam[]             @relation("ExamCreator")
+  submissions       ExamSubmission[]
+  answers           Answer[]
+  gradedSubmissions ExamSubmission[]   @relation("GradedBy")
+  
+  @@index([email])
+}
+
+model Exam {
+  id                String             @id @default(cuid())
+  title             String
+  description       String?
+  duration          Int
+  maxAttempts       Int                @default(1)
+  startDate         DateTime
+  endDate           DateTime
+  status            ExamStatus         @default(DRAFT)
+  passingScore      Float?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  
+  creatorId         String
+  creator           User               @relation("ExamCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  
+  questions         Question[]
+  submissions       ExamSubmission[]
+  
+  @@index([creatorId])
+  @@index([status])
+}
+
+model Question {
+  id                String             @id @default(cuid())
+  examId            String
+  exam              Exam               @relation(fields: [examId], references: [id], onDelete: Cascade)
+  
+  type              QuestionType
+  question          String
+  points            Float              @default(1)
+  order             Int
+  
+  options           QuestionOption[]
+  answers           Answer[]
+  
+  @@index([examId])
+}
+
+model QuestionOption {
+  id                String             @id @default(cuid())
+  questionId        String
+  question          Question           @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  
+  optionText        String
+  isCorrect         Boolean            @default(false)
+  order             Int
+  
+  @@index([questionId])
+}
+
+model ExamSubmission {
+  id                String             @id @default(cuid())
+  examId            String
+  exam              Exam               @relation(fields: [examId], references: [id], onDelete: Cascade)
+  
+  studentId         String
+  student           User               @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  status            SubmissionStatus   @default(IN_PROGRESS)
+  startedAt         DateTime           @default(now())
+  submittedAt       DateTime?
+  score             Float?
+  totalPoints       Float?
+  
+  gradedById        String?
+  gradedBy          User?              @relation("GradedBy", fields: [gradedById], references: [id])
+  gradedAt          DateTime?
+  
+  answers           Answer[]
+  activityLogs      ActivityLog[]
+  
+  @@unique([examId, studentId])
+  @@index([examId])
+  @@index([studentId])
+}
+
+model Answer {
+  id                String             @id @default(cuid())
+  submissionId      String
+  submission        ExamSubmission     @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  
+  questionId        String
+  question          Question           @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  
+  studentId         String
+  student           User               @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  
+  answerText        String?
+  selectedOptions   String[]
+  
+  isCorrect         Boolean?
+  pointsAwarded     Float?
+  feedback          String?
+  
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  
+  @@unique([submissionId, questionId])
+  @@index([submissionId])
+  @@index([questionId])
+}
+
+model ActivityLog {
+  id                String             @id @default(cuid())
+  submissionId      String
+  submission        ExamSubmission     @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  
+  action            String
+  timestamp         DateTime           @default(now())
+  metadata          String?
+  
+  @@index([submissionId])
+}
